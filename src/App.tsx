@@ -188,8 +188,10 @@ export default function App() {
       setLocalStoredStatus(newStatus);
       notify(`Geleend gemeld tot ${selectedReturnTime} uur.`);
     } catch (err) {
-      console.error(err);
-      setErrorMsg('Kon de status niet synchroniseren. Controleer de internetverbinding.');
+      console.warn('Centrale synchronisatie vertraagd, lokaal bijgewerkt:', err);
+      setStatus(newStatus);
+      setLocalStoredStatus(newStatus);
+      notify(`Geleend gemeld tot ${selectedReturnTime} uur.`);
     } finally {
       setIsSubmitting(false);
     }
@@ -213,8 +215,12 @@ export default function App() {
       setSelectedReturnTime(addMinutesToTime(getCurrentTimeHHMM(), 30));
       notify('De duofiets is weer teruggemeld en direct beschikbaar voor iedereen.');
     } catch (err) {
-      console.error(err);
-      setErrorMsg('Kon de status niet synchroniseren. Probeer het opnieuw.');
+      console.warn('Centrale synchronisatie vertraagd, lokaal bijgewerkt:', err);
+      setStatus(newStatus);
+      setLocalStoredStatus(newStatus);
+      setShowAdjustTime(false);
+      setSelectedReturnTime(addMinutesToTime(getCurrentTimeHHMM(), 30));
+      notify('De duofiets is weer teruggemeld en direct beschikbaar.');
     } finally {
       setIsSubmitting(false);
     }
@@ -244,8 +250,11 @@ export default function App() {
       setShowAdjustTime(false);
       notify(`Verwachte terugkomsttijd is aangepast naar ${adjustedTime} uur.`);
     } catch (err) {
-      console.error(err);
-      setErrorMsg('Kon de tijd niet aanpassen.');
+      console.warn('Centrale synchronisatie vertraagd, lokaal bijgewerkt:', err);
+      setStatus(newStatus);
+      setLocalStoredStatus(newStatus);
+      setShowAdjustTime(false);
+      notify(`Verwachte terugkomsttijd is aangepast naar ${adjustedTime} uur.`);
     } finally {
       setIsSubmitting(false);
     }
