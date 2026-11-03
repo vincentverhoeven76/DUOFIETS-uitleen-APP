@@ -1,0 +1,34 @@
+{
+  "entities": {
+    "DuofietsStatus": {
+      "title": "DuofietsStatus",
+      "description": "De realtime beschikbaarheidsstatus van de elektrische duofiets",
+      "type": "object",
+      "properties": {
+        "isAvailable": {
+          "type": "boolean",
+          "description": "Geeft aan of de duofiets aanwezig is in de stalling"
+        },
+        "expectedReturnTime": {
+          "type": "string",
+          "description": "Verwachte terugkomsttijd in UU:mm formaat wanneer de fiets is uitgeleend"
+        },
+        "borrowedAt": {
+          "type": "string",
+          "description": "Tijdstip van vertrek in UU:mm formaat"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "ISO timestamp van de laatste statuswijziging"
+        }
+      },
+      "required": ["isAvailable", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/duofiets/{statusId}": {
+      "schema": "DuofietsStatus",
+      "description": "Actuele beschikbaarheid van de duofiets die realtime gesynchroniseerd wordt tussen alle gebruikers en apparaten"
+    }
+  }
+}

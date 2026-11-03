@@ -1,0 +1,16 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Actuele beschikbaarheidsstatus van de duofiets
+    match /duofiets/{statusId} {
+      allow read: if true;
+      allow write: if request.resource.data.isAvailable is bool;
+    }
+
+    // Default deny voor alle overige paden
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

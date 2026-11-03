@@ -8,8 +8,12 @@ import {
   Timer,
 } from 'lucide-react';
 import type { DuofietsStatus } from './types';
+import {
+  subscribeToDuofietsStatus,
+  saveDuofietsStatusToFirebase,
+} from './firebase';
 
-// Relative asset paths so the app works on GitHub Pages sub-paths (e.g. username.github.io/repository/)
+// Relatieve paden voor afbeeldingen zodat het direct werkt op GitHub Pages en lokaal
 const LOGO_IMAGE_PATH = './assets/logo.jpg';
 const LOGO_FALLBACK_PATH = './assets/aistudio/Lichtenbeek_logo_100__badf7cc8.jpg';
 const HERO_IMAGE_PATH = './assets/images/elektrische_duofiets_hero.jpg';
@@ -78,7 +82,7 @@ function getLocalStoredStatus(): DuofietsStatus {
     const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
     if (raw) return JSON.parse(raw);
   } catch {
-    // Ignore localStorage errors
+    // Negeer fouten bij openen van localStorage
   }
   return {
     isAvailable: true,
@@ -90,7 +94,7 @@ function setLocalStoredStatus(status: DuofietsStatus): void {
   try {
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(status));
   } catch {
-    // Ignore localStorage errors
+    // Negeer
   }
 }
 
@@ -102,9 +106,8 @@ export default function App() {
   const [feedbackMsg, setFeedbackMsg] = useState<string | null>(null);
   const [heroImageFailed, setHeroImageFailed] = useState<boolean>(false);
   const [logoFailed, setLogoFailed] = useState<boolean>(false);
-  const [isServerMode, setIsServerMode] = useState<boolean>(false);
 
-  // Form states
+  // Formulier statussen
   const [selectedReturnTime, setSelectedReturnTime] = useState<string>(() =>
     addMinutesToTime(getCurrentTimeHHMM(), 90)
   );
@@ -112,7 +115,7 @@ export default function App() {
   const [adjustedTime, setAdjustedTime] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
-  // Keep live time updated every 10 seconds
+  // Houd de lokale tijd actueel
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentTime(getCurrentTimeHHMM());
@@ -120,98 +123,38 @@ export default function App() {
     return () => clearInterval(timer);
   }, []);
 
-  // Hybrid Sync Engine: Tries backend API first; falls back seamlessly to localStorage on GitHub Pages
+  // Luister realtime naar de centrale Firebase database (werkt wereldwijd op alle apparaten & GitHub Pages)
   useEffect(() => {
     let isMounted = true;
-    let sse: EventSource | null = null;
-    let channel: BroadcastChannel | null = null;
 
-    try {
-      channel = new BroadcastChannel('duofiets_broadcast');
-      channel.onmessage = (event) => {
-        if (isMounted && event.data) {
-          setStatus(event.data);
-          if (event.data.expectedReturnTime) {
-            setAdjustedTime(addMinutesToTime(event.data.expectedReturnTime, 30));
-          }
-        }
-      };
-    } catch {
-      // BroadcastChannel not supported in all older browsers, ignore
+    // Start direct met eventuele gecachte lokale status voor snelle weergave
+    const cached = getLocalStoredStatus();
+    setStatus(cached);
+    if (cached.expectedReturnTime) {
+      setAdjustedTime(addMinutesToTime(cached.expectedReturnTime, 30));
     }
 
-    const onStorageChange = (e: StorageEvent) => {
-      if (e.key === LOCAL_STORAGE_KEY && e.newValue && isMounted) {
-        try {
-          const parsed = JSON.parse(e.newValue);
-          setStatus(parsed);
-          if (parsed.expectedReturnTime) {
-            setAdjustedTime(addMinutesToTime(parsed.expectedReturnTime, 30));
-          }
-        } catch {
-          // ignore
-        }
-      }
-    };
-    window.addEventListener('storage', onStorageChange);
-
-    async function initStatus() {
-      try {
-        const res = await fetch('/api/status', { method: 'GET' });
-        if (res.ok) {
-          const data: DuofietsStatus = await res.json();
-          if (isMounted) {
-            setIsServerMode(true);
-            setStatus(data);
-            setLocalStoredStatus(data);
-            setLoading(false);
-            if (data.expectedReturnTime) {
-              setAdjustedTime(addMinutesToTime(data.expectedReturnTime, 30));
-            }
-          }
-
-          // Connect to real-time SSE if server is active
-          sse = new EventSource('/api/events');
-          sse.onmessage = (event) => {
-            try {
-              const updated: DuofietsStatus = JSON.parse(event.data);
-              if (isMounted) {
-                setStatus(updated);
-                setLocalStoredStatus(updated);
-                setLoading(false);
-                if (updated.expectedReturnTime) {
-                  setAdjustedTime(addMinutesToTime(updated.expectedReturnTime, 30));
-                }
-              }
-            } catch {
-              // ignore
-            }
-          };
-          return;
-        }
-      } catch {
-        // Server not available (e.g. running as static HTML on GitHub Pages)
-      }
-
-      // Static GitHub Pages fallback
-      if (isMounted) {
-        setIsServerMode(false);
-        const local = getLocalStoredStatus();
-        setStatus(local);
+    const unsubscribe = subscribeToDuofietsStatus(
+      (cloudStatus) => {
+        if (!isMounted) return;
+        setStatus(cloudStatus);
+        setLocalStoredStatus(cloudStatus);
         setLoading(false);
-        if (local.expectedReturnTime) {
-          setAdjustedTime(addMinutesToTime(local.expectedReturnTime, 30));
+        if (cloudStatus.expectedReturnTime) {
+          setAdjustedTime(addMinutesToTime(cloudStatus.expectedReturnTime, 30));
+        }
+      },
+      (err) => {
+        console.warn('Realtime database verbinding fout:', err);
+        if (isMounted) {
+          setLoading(false);
         }
       }
-    }
-
-    initStatus();
+    );
 
     return () => {
       isMounted = false;
-      if (sse) sse.close();
-      if (channel) channel.close();
-      window.removeEventListener('storage', onStorageChange);
+      unsubscribe();
     };
   }, []);
 
@@ -222,19 +165,7 @@ export default function App() {
     }, 4000);
   }
 
-  function broadcastLocalStatus(updated: DuofietsStatus) {
-    setStatus(updated);
-    setLocalStoredStatus(updated);
-    try {
-      const channel = new BroadcastChannel('duofiets_broadcast');
-      channel.postMessage(updated);
-      channel.close();
-    } catch {
-      // ignore
-    }
-  }
-
-  // Handle borrow action
+  // Fiets meenemen / geleend melden
   async function handleBorrow(e?: React.FormEvent) {
     if (e) e.preventDefault();
     if (!selectedReturnTime) {
@@ -251,33 +182,20 @@ export default function App() {
       updatedAt: new Date().toISOString(),
     };
 
-    if (isServerMode) {
-      try {
-        const res = await fetch('/api/borrow', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ expectedReturnTime: selectedReturnTime }),
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setStatus(data);
-          setLocalStoredStatus(data);
-          notify(`Geleend gemeld tot ${selectedReturnTime} uur.`);
-          setIsSubmitting(false);
-          return;
-        }
-      } catch {
-        // Fall back to local storage
-      }
+    try {
+      await saveDuofietsStatusToFirebase(newStatus);
+      setStatus(newStatus);
+      setLocalStoredStatus(newStatus);
+      notify(`Geleend gemeld tot ${selectedReturnTime} uur.`);
+    } catch (err) {
+      console.error(err);
+      setErrorMsg('Kon de status niet synchroniseren. Controleer de internetverbinding.');
+    } finally {
+      setIsSubmitting(false);
     }
-
-    // Static / Local execution
-    broadcastLocalStatus(newStatus);
-    notify(`Geleend gemeld tot ${selectedReturnTime} uur.`);
-    setIsSubmitting(false);
   }
 
-  // Handle return action
+  // Fiets terugbrengen
   async function handleReturn() {
     setErrorMsg(null);
     setIsSubmitting(true);
@@ -289,36 +207,22 @@ export default function App() {
       updatedAt: new Date().toISOString(),
     };
 
-    if (isServerMode) {
-      try {
-        const res = await fetch('/api/return', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setStatus(data);
-          setLocalStoredStatus(data);
-          setShowAdjustTime(false);
-          setSelectedReturnTime(addMinutesToTime(getCurrentTimeHHMM(), 90));
-          notify('De duofiets is weer teruggemeld en direct beschikbaar.');
-          setIsSubmitting(false);
-          return;
-        }
-      } catch {
-        // Fall back to local storage
-      }
+    try {
+      await saveDuofietsStatusToFirebase(newStatus);
+      setStatus(newStatus);
+      setLocalStoredStatus(newStatus);
+      setShowAdjustTime(false);
+      setSelectedReturnTime(addMinutesToTime(getCurrentTimeHHMM(), 90));
+      notify('De duofiets is weer teruggemeld en direct beschikbaar voor iedereen.');
+    } catch (err) {
+      console.error(err);
+      setErrorMsg('Kon de status niet synchroniseren.');
+    } finally {
+      setIsSubmitting(false);
     }
-
-    // Static / Local execution
-    broadcastLocalStatus(newStatus);
-    setShowAdjustTime(false);
-    setSelectedReturnTime(addMinutesToTime(getCurrentTimeHHMM(), 90));
-    notify('De duofiets is weer teruggemeld en direct beschikbaar.');
-    setIsSubmitting(false);
   }
 
-  // Handle adjust return time
+  // Terugkomsttijd aanpassen
   async function handleAdjustTime(e: React.FormEvent) {
     e.preventDefault();
     if (!adjustedTime) {
@@ -335,32 +239,18 @@ export default function App() {
       updatedAt: new Date().toISOString(),
     };
 
-    if (isServerMode) {
-      try {
-        const res = await fetch('/api/extend', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ expectedReturnTime: adjustedTime }),
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setStatus(data);
-          setLocalStoredStatus(data);
-          setShowAdjustTime(false);
-          notify(`Verwachte terugkomsttijd is aangepast naar ${adjustedTime} uur.`);
-          setIsSubmitting(false);
-          return;
-        }
-      } catch {
-        // Fall back to local
-      }
+    try {
+      await saveDuofietsStatusToFirebase(newStatus);
+      setStatus(newStatus);
+      setLocalStoredStatus(newStatus);
+      setShowAdjustTime(false);
+      notify(`Verwachte terugkomsttijd is aangepast naar ${adjustedTime} uur.`);
+    } catch (err) {
+      console.error(err);
+      setErrorMsg('Kon de tijd niet aanpassen.');
+    } finally {
+      setIsSubmitting(false);
     }
-
-    // Static / Local execution
-    broadcastLocalStatus(newStatus);
-    setShowAdjustTime(false);
-    notify(`Verwachte terugkomsttijd is aangepast naar ${adjustedTime} uur.`);
-    setIsSubmitting(false);
   }
 
   const isAvailable = status?.isAvailable ?? true;
@@ -372,7 +262,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#FAF9F6] text-[#1E282A] flex flex-col selection:bg-[#009BB0] selection:text-white">
-      {/* Top Bar with De Lichtenbeek Logo & Live Clock */}
+      {/* Top Bar met De Lichtenbeek Logo & Live Klok */}
       <header className="bg-white border-b border-[#E8E4DA] px-4 sm:px-8 py-3.5 shadow-xs">
         <div className="max-w-3xl mx-auto flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
@@ -401,7 +291,7 @@ export default function App() {
             )}
             <div className="hidden sm:block border-l border-[#E2DDCF] pl-3 text-xs text-[#8C7C52] font-medium leading-tight">
               <div>Elektrische Duofiets</div>
-              <div className="text-[11px] text-stone-400">Beschikbaarheid</div>
+              <div className="text-[11px] text-stone-400">Live Beschikbaarheid</div>
             </div>
           </div>
 
@@ -412,9 +302,9 @@ export default function App() {
         </div>
       </header>
 
-      {/* Main Content Area */}
+      {/* Hoofdsectie */}
       <main className="flex-1 max-w-3xl w-full mx-auto px-4 sm:px-6 py-8 sm:py-10 flex flex-col justify-center">
-        {/* Feedback message */}
+        {/* Bevestigingsbericht */}
         {feedbackMsg && (
           <div
             role="status"
@@ -434,7 +324,7 @@ export default function App() {
           </div>
         )}
 
-        {/* Error message */}
+        {/* Foutmelding */}
         {errorMsg && (
           <div
             role="alert"
@@ -454,7 +344,7 @@ export default function App() {
           </div>
         )}
 
-        {/* Loading skeleton */}
+        {/* Laadstatus */}
         {loading ? (
           <div className="bg-white border border-[#E8E4DA] rounded-2xl p-8 sm:p-12 shadow-xs space-y-6 animate-pulse">
             <div className="h-8 bg-[#F5F2EA] rounded-lg w-2/3" />
@@ -463,7 +353,7 @@ export default function App() {
           </div>
         ) : (
           <div className="space-y-6">
-            {/* MAIN STATUS CARD */}
+            {/* HOOFD STATUSKAART */}
             <div
               className={`bg-white border rounded-2xl overflow-hidden shadow-sm transition-colors duration-200 ${
                 isAvailable
@@ -471,7 +361,7 @@ export default function App() {
                   : 'border-[#B6A476]/40 shadow-[#B6A476]/5'
               }`}
             >
-              {/* Photo Banner with subtle overlay & duofiets image */}
+              {/* Foto Banner met duofiets */}
               <div className="relative h-44 sm:h-52 w-full bg-stone-100 overflow-hidden">
                 {!heroImageFailed ? (
                   <img
@@ -487,7 +377,7 @@ export default function App() {
                   </div>
                 )}
 
-                {/* Status Badge in Lichtenbeek Colors */}
+                {/* Status Badge in Lichtenbeek Kleuren */}
                 <div className="absolute top-4 right-4">
                   <div
                     className={`px-3.5 py-1.5 rounded-full text-xs font-semibold shadow-md flex items-center gap-2 backdrop-blur-md ${
@@ -501,15 +391,15 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Subtitle tag bottom left */}
+                {/* Subtiele tag */}
                 <div className="absolute bottom-3 left-4 bg-black/60 backdrop-blur-xs text-white text-[11px] px-2.5 py-1 rounded-md font-medium">
                   De Lichtenbeek · Elektrische Duofiets
                 </div>
               </div>
 
-              {/* CARD CONTENT */}
+              {/* KAART INHOUD */}
               <div className="p-6 sm:p-8 space-y-6">
-                {/* SITUATION 1: DE FIETS IS AANWEZIG */}
+                {/* SITUATIE 1: DE FIETS IS AANWEZIG */}
                 {isAvailable ? (
                   <div className="space-y-6">
                     <div className="space-y-1.5">
@@ -525,14 +415,14 @@ export default function App() {
                       </p>
                     </div>
 
-                    {/* Borrow action form */}
+                    {/* Leen actie formulier */}
                     <div className="pt-6 border-t border-[#EFECE3] space-y-4">
                       <div className="space-y-2.5">
                         <label className="block text-xs font-semibold text-[#8C7C52] uppercase tracking-wider">
                           Tot hoe laat leen je de duofiets?
                         </label>
 
-                        {/* Quick Presets styled with Lichtenbeek Teal & Sand */}
+                        {/* Snelle Tijdkeuzeknoppen */}
                         <div className="flex flex-wrap items-center gap-2">
                           {[
                             { label: '1 uur', mins: 60 },
@@ -560,7 +450,7 @@ export default function App() {
                           })}
                         </div>
 
-                        {/* Direct Time Input */}
+                        {/* Directe tijdinvoer */}
                         <div className="pt-2 flex items-center gap-3">
                           <span className="text-xs text-stone-500">Of kies zelf een tijd:</span>
                           <input
@@ -574,7 +464,7 @@ export default function App() {
                         </div>
                       </div>
 
-                      {/* Main Borrow Button in Lichtenbeek Teal */}
+                      {/* Grote Leenknop */}
                       <button
                         type="button"
                         onClick={() => handleBorrow()}
@@ -591,7 +481,7 @@ export default function App() {
                     </div>
                   </div>
                 ) : (
-                  /* SITUATION 2: DE FIETS IS WEG (GELEEND) */
+                  /* SITUATIE 2: DE FIETS IS WEG (GELEEND) */
                   <div className="space-y-6">
                     <div className="space-y-2">
                       <div className="flex items-center gap-2 text-[#8C7C52] text-sm font-semibold">
@@ -603,7 +493,7 @@ export default function App() {
                         De duofiets is geleend
                       </h1>
 
-                      {/* Prominent Return Time Display in Lichtenbeek Warm Sand & Deep Teal */}
+                      {/* Grote Tijdsaanduiding */}
                       <div className="bg-[#FAF7F0] border border-[#E5DECD] rounded-xl p-5 my-4 space-y-1">
                         <div className="text-xs text-[#8C7C52] font-semibold uppercase tracking-wider">
                           Verwachte terugkomsttijd:
@@ -626,7 +516,7 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* Big Return Button in Lichtenbeek Teal */}
+                    {/* Grote Terugbrengknop */}
                     <button
                       type="button"
                       onClick={handleReturn}
@@ -641,7 +531,7 @@ export default function App() {
                       </span>
                     </button>
 
-                    {/* Adjust Time toggle */}
+                    {/* Tijd verlengen als de rit uitloopt */}
                     <div className="pt-2 text-center">
                       {!showAdjustTime ? (
                         <button
@@ -716,7 +606,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* Subtle footer with De Lichtenbeek motto */}
+            {/* Subtiele footer met motto van De Lichtenbeek */}
             <div className="text-center space-y-1 pt-2">
               <p className="text-xs text-[#009BB0] italic font-medium">
                 "Samen laten we elk kind groeien"
