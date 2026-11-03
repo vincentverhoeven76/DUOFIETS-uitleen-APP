@@ -109,7 +109,7 @@ export default function App() {
 
   // Formulier statussen
   const [selectedReturnTime, setSelectedReturnTime] = useState<string>(() =>
-    addMinutesToTime(getCurrentTimeHHMM(), 90)
+    addMinutesToTime(getCurrentTimeHHMM(), 30)
   );
   const [showAdjustTime, setShowAdjustTime] = useState<boolean>(false);
   const [adjustedTime, setAdjustedTime] = useState<string>('');
@@ -420,14 +420,13 @@ export default function App() {
                           Tot hoe laat leen je de duofiets?
                         </label>
 
-                        {/* Snelle Tijdkeuzeknoppen */}
+                        {/* Snelle Tijdkeuzeknoppen: 15 min, half uur, 45 min, 1 uur */}
                         <div className="flex flex-wrap items-center gap-2">
                           {[
+                            { label: '15 minuten', mins: 15 },
+                            { label: 'Een half uur', mins: 30 },
+                            { label: '45 minuten', mins: 45 },
                             { label: '1 uur', mins: 60 },
-                            { label: '1,5 uur', mins: 90 },
-                            { label: '2 uur', mins: 120 },
-                            { label: '3 uur', mins: 180 },
-                            { label: 'Middag (+4u)', mins: 240 },
                           ].map((preset) => {
                             const calculated = addMinutesToTime(currentTime, preset.mins);
                             const isSelected = selectedReturnTime === calculated;
@@ -555,19 +554,24 @@ export default function App() {
                           </div>
 
                           <div className="flex flex-wrap items-center gap-2">
-                            {[15, 30, 45, 60].map((mins) => {
+                            {[
+                              { label: '+15 min', mins: 15 },
+                              { label: '+30 min', mins: 30 },
+                              { label: '+45 min', mins: 45 },
+                              { label: '+1 uur', mins: 60 },
+                            ].map((preset) => {
                               const calculated = addMinutesToTime(
                                 expectedReturnTime || currentTime,
-                                mins
+                                preset.mins
                               );
                               return (
                                 <button
-                                  key={mins}
+                                  key={preset.label}
                                   type="button"
                                   onClick={() => setAdjustedTime(calculated)}
                                   className="px-2.5 py-1.5 text-xs font-medium text-[#6E603E] bg-white border border-[#E0D9C8] hover:bg-[#F3EFE4] rounded font-mono tabular-nums cursor-pointer"
                                 >
-                                  +{mins} min ({calculated})
+                                  {preset.label} ({calculated})
                                 </button>
                               );
                             })}

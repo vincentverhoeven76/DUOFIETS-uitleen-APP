@@ -1,8 +1,15 @@
 node_modules/
 build/
 dist/
+docs/
 coverage/
 .DS_Store
 *.log
 .env*
 !.env.example
+
+# Beveiliging: Firebase configuraties en API keys NOOIT publiceren op GitHub
+firebase-applet-config.json
+firebase_applet_config.xml
+duofiets-data.json
+duofiets-status.json

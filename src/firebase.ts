@@ -1,25 +1,40 @@
-import { initializeApp } from 'firebase/app';
-import { doc, getFirestore, onSnapshot, setDoc } from 'firebase/firestore';
-import firebaseConfig from '../firebase-applet-config.json';
+import { initializeApp, getApps, type FirebaseApp } from 'firebase/app';
+import { doc, getFirestore, onSnapshot, setDoc, type Firestore } from 'firebase/firestore';
+import { firebaseConfig, hasFirebaseConfig } from './config';
 import type { DuofietsStatus } from './types';
 
-// Initialiseer Firebase met de geprovisioneerde configuratie
-const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+let app: FirebaseApp | null = null;
+let db: Firestore | null = null;
 
-const STATUS_DOC_REF = doc(db, 'duofiets', 'status');
+if (hasFirebaseConfig) {
+  try {
+    app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+    db = firebaseConfig.firestoreDatabaseId
+      ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
+      : getFirestore(app);
+  } catch (err) {
+    console.warn('Firebase initialisatie kon niet worden voltooid:', err);
+  }
+}
 
 /**
  * Luistert realtime naar statuswijzigingen in Firestore.
- * Zodra iemand op zijn telefoon de status wijzigt, krijgen alle geopende
- * apparaten wereldwijd direct de update binnen.
+ * Als Firebase niet geconfigureerd is (bijv. in een public test repository),
+ * wordt netjes de onError callback aangeroepen zodat de app op localStorage draait.
  */
 export function subscribeToDuofietsStatus(
   onUpdate: (status: DuofietsStatus) => void,
   onError?: (err: unknown) => void
-) {
+): () => void {
+  if (!db) {
+    if (onError) onError(new Error('Firebase niet geconfigureerd'));
+    return () => {};
+  }
+
+  const statusDocRef = doc(db, 'duofiets', 'status');
+
   return onSnapshot(
-    STATUS_DOC_REF,
+    statusDocRef,
     (snapshot) => {
       if (snapshot.exists()) {
         const raw = snapshot.data();
@@ -31,17 +46,16 @@ export function subscribeToDuofietsStatus(
         };
         onUpdate(data);
       } else {
-        // Document bestaat nog niet in Firestore; initialiseer op 'aanwezig'
         const initialStatus: DuofietsStatus = {
           isAvailable: true,
           updatedAt: new Date().toISOString(),
         };
-        setDoc(STATUS_DOC_REF, initialStatus).catch(console.error);
+        setDoc(statusDocRef, initialStatus).catch(console.error);
         onUpdate(initialStatus);
       }
     },
     (err) => {
-      console.warn('Firestore live listener error:', err);
+      console.warn('Firestore live listener fout:', err);
       if (onError) onError(err);
     }
   );
@@ -52,6 +66,11 @@ export function subscribeToDuofietsStatus(
  * Voorkomt 'undefined' waarden die Firestore blokkeert.
  */
 export async function saveDuofietsStatusToFirebase(status: DuofietsStatus): Promise<void> {
+  if (!db) {
+    throw new Error('Geen centrale database verbinding');
+  }
+
+  const statusDocRef = doc(db, 'duofiets', 'status');
   const cleanPayload: Record<string, string | boolean> = {
     isAvailable: Boolean(status.isAvailable),
     updatedAt: status.updatedAt || new Date().toISOString(),
@@ -64,5 +83,7 @@ export async function saveDuofietsStatusToFirebase(status: DuofietsStatus): Prom
     cleanPayload.borrowedAt = status.borrowedAt;
   }
 
-  await setDoc(STATUS_DOC_REF, cleanPayload);
+  await setDoc(statusDocRef, cleanPayload);
 }
+
+export { hasFirebaseConfig };
