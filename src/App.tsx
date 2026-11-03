@@ -202,8 +202,6 @@ export default function App() {
 
     const newStatus: DuofietsStatus = {
       isAvailable: true,
-      expectedReturnTime: undefined,
-      borrowedAt: undefined,
       updatedAt: new Date().toISOString(),
     };
 
@@ -216,7 +214,7 @@ export default function App() {
       notify('De duofiets is weer teruggemeld en direct beschikbaar voor iedereen.');
     } catch (err) {
       console.error(err);
-      setErrorMsg('Kon de status niet synchroniseren.');
+      setErrorMsg('Kon de status niet synchroniseren. Probeer het opnieuw.');
     } finally {
       setIsSubmitting(false);
     }

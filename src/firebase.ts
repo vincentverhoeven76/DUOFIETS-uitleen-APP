@@ -22,7 +22,13 @@ export function subscribeToDuofietsStatus(
     STATUS_DOC_REF,
     (snapshot) => {
       if (snapshot.exists()) {
-        const data = snapshot.data() as DuofietsStatus;
+        const raw = snapshot.data();
+        const data: DuofietsStatus = {
+          isAvailable: Boolean(raw.isAvailable),
+          expectedReturnTime: raw.expectedReturnTime || undefined,
+          borrowedAt: raw.borrowedAt || undefined,
+          updatedAt: raw.updatedAt || new Date().toISOString(),
+        };
         onUpdate(data);
       } else {
         // Document bestaat nog niet in Firestore; initialiseer op 'aanwezig'
@@ -43,7 +49,20 @@ export function subscribeToDuofietsStatus(
 
 /**
  * Werkt de status bij in de centrale database zodat iedereen het direct ziet.
+ * Voorkomt 'undefined' waarden die Firestore blokkeert.
  */
 export async function saveDuofietsStatusToFirebase(status: DuofietsStatus): Promise<void> {
-  await setDoc(STATUS_DOC_REF, status);
+  const cleanPayload: Record<string, string | boolean> = {
+    isAvailable: Boolean(status.isAvailable),
+    updatedAt: status.updatedAt || new Date().toISOString(),
+  };
+
+  if (status.expectedReturnTime) {
+    cleanPayload.expectedReturnTime = status.expectedReturnTime;
+  }
+  if (status.borrowedAt) {
+    cleanPayload.borrowedAt = status.borrowedAt;
+  }
+
+  await setDoc(STATUS_DOC_REF, cleanPayload);
 }
