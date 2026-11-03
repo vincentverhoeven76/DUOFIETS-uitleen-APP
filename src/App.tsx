@@ -608,13 +608,13 @@ export default function App() {
               </div>
             </div>
 
-            {/* Subtiele footer met motto van De Lichtenbeek */}
-            <div className="text-center space-y-1 pt-2">
+            {/* Subtiele footer met motto van De Lichtenbeek en acculader herinnering */}
+            <div className="text-center space-y-2 pt-3">
+              <p className="text-sm sm:text-base font-semibold text-[#786940]">
+                Na de rit graag weer aan de acculader koppelen
+              </p>
               <p className="text-xs text-[#009BB0] italic font-medium">
                 "Samen laten we elk kind groeien"
-              </p>
-              <p className="text-[11px] text-[#8C7C52]">
-                Na de rit graag weer aan de acculader koppelen
               </p>
             </div>
           </div>
