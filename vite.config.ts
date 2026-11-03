@@ -5,7 +5,7 @@ import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
   return {
-    base: './',
+    base: './DUOFIETS-uitleen-APP/',
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
