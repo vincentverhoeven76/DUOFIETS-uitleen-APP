@@ -1,0 +1,31 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-display: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-sans: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+    --color-lichtenbeek-teal: #009bb0;
+    --color-lichtenbeek-teal-dark: #007e8f;
+    --color-lichtenbeek-teal-deep: #06535f;
+    --color-lichtenbeek-teal-light: #ebf7f9;
+    --color-lichtenbeek-sand: #b6a476;
+    --color-lichtenbeek-sand-dark: #8c7c52;
+    --color-lichtenbeek-sand-light: #f7f5ed;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    color: #1e282a;
+    background-color: #faf9f6;
+  }
+
+  h1, h2, h3, h4, .font-display {
+    font-family: var(--font-display);
+  }
+
+  .font-mono, .tabular-nums {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "Duofiets De Lichtenbeek — Beschikbaarheid",
+  "description": "Bekijk direct of de elektrische duofiets van De Lichtenbeek aanwezig is of tot wanneer hij is geleend.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
