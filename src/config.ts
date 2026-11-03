@@ -1,5 +1,6 @@
 // src/config.ts
 // Beveiligt Firebase configuraties zodat er GEEN API keys zichtbaar worden in de GitHub repository.
+import localConfig from 'virtual:firebase-config';
 
 interface FirebaseConfigShape {
   apiKey: string;
@@ -11,30 +12,22 @@ interface FirebaseConfigShape {
   messagingSenderId?: string;
 }
 
-let localFileConfig: Partial<FirebaseConfigShape> = {};
-
-try {
-  // Dynamische import van het lokale configuratiebestand.
-  // Dit bestand staat in .gitignore en wordt NOOIT naar GitHub gepusht.
-  const local = await import('../firebase-applet-config.json');
-  localFileConfig = local.default || local;
-} catch {
-  // Op GitHub Pages of een schone clone is dit bestand afwezig; dat is verwacht.
-}
+const local: Partial<FirebaseConfigShape> = localConfig || {};
 
 export const firebaseConfig: FirebaseConfigShape = {
   // Prioriteit 1: GitHub Actions Secrets / Environment Variables
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || localFileConfig.apiKey || '',
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || localFileConfig.projectId || '',
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || localFileConfig.appId || '',
+  // Prioriteit 2: Lokaal ontwikkelbestand (staat in .gitignore en wordt niet gepusht naar GitHub)
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || local.apiKey || '',
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || local.projectId || '',
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || local.appId || '',
   firestoreDatabaseId:
     import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID ||
-    localFileConfig.firestoreDatabaseId ||
+    local.firestoreDatabaseId ||
     '',
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || localFileConfig.authDomain || '',
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || localFileConfig.storageBucket || '',
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || local.authDomain || '',
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || local.storageBucket || '',
   messagingSenderId:
-    import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || localFileConfig.messagingSenderId || '',
+    import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || local.messagingSenderId || '',
 };
 
 export const hasFirebaseConfig = Boolean(
