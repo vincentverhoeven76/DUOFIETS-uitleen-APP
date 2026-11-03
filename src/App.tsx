@@ -210,7 +210,7 @@ export default function App() {
       setStatus(newStatus);
       setLocalStoredStatus(newStatus);
       setShowAdjustTime(false);
-      setSelectedReturnTime(addMinutesToTime(getCurrentTimeHHMM(), 90));
+      setSelectedReturnTime(addMinutesToTime(getCurrentTimeHHMM(), 30));
       notify('De duofiets is weer teruggemeld en direct beschikbaar voor iedereen.');
     } catch (err) {
       console.error(err);
@@ -614,7 +614,7 @@ export default function App() {
                 "Samen laten we elk kind groeien"
               </p>
               <p className="text-[11px] text-[#8C7C52]">
-                Sleutel hangt in het kluisje · Na de rit graag weer aan de acculader koppelen
+                Na de rit graag weer aan de acculader koppelen
               </p>
             </div>
           </div>
